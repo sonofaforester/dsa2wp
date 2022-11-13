@@ -1,7 +1,12 @@
+# Download all content from web: wget -r -nc http://www.dougschmittantiques.com/
+# Scp images to server: scp -rp * root@172.28.195.229:/var/www/wordpress/wp-content/images/
+# Register all media:  for i in {0..99}; do sudo wp media import $i/* --allow-root --path=/var/www/html; rm -r $i; done
+
 import os
 import sys
 from pathlib import Path
 from html.parser import HTMLParser
+import hashlib
 
 excluded_text = ["","\n","\n\n",'www.dougschmittantiques.com','\xa0',' or ']
 excluded_images = ['signsSOLD_17055.gif','SOLD_17055.gif']
@@ -50,16 +55,18 @@ class MyHTMLParser(HTMLParser):
     def __init__(self):
         HTMLParser.__init__(self)
 
-rootdir = os.getcwd()
-outfileName = rootdir + "/py-outfile.txt" # hardcoded path
+rootdir = "C://temp//www.dougschmittantiques.com//"
+outfileName = "py-outfile.txt" # hardcoded path
 folderOut = open( outfileName, 'w' )
-folderOut.write('sku,title,categories,description,images,"Attribute 1 name","Attribute 1 value(s)","Attribute 1 visible","Attribute 1 global"\n')
+folderOut.write('sku,title,categories,stock,description,images,"Attribute 1 name","Attribute 1 value(s)","Attribute 1 visible","Attribute 1 global"\n')
 
-result = list(Path("./original_site").rglob("*.[hH][tT][mM]"))
+result = list(Path(rootdir).rglob("*.[hH][tT][mM]"))
 
-count = 0
+img_count = 0
+file_count = 0
 
 for file in result:
+    file_count = file_count + 1
 
     f = open(file, 'r' ,encoding='UTF-8', errors='ignore')
     toWrite = f.read()
@@ -71,37 +78,41 @@ for file in result:
     for img in parser.images.split(","):
         if "SOLD_17055" in img:
             continue;
+        if img == '':
+            continue;
 
-        img = img.replace("http://www.dougschmittantiques.com/","");
-        fileLocation = Path(f"{file.parent}/{img}").resolve();
-        newFilename = f"{os.path.relpath(fileLocation).replace('/','__')}".replace(" & ","-").replace("'","").replace("(","").replace(")","").replace(" ","-");
+        img_cleaned = img.replace("http://www.dougschmittantiques.com/","").replace("%20"," ");
+        fileLocation = Path(f"{file.parent}/{img_cleaned}").resolve();
+        newFilename = f"{os.path.relpath(fileLocation,rootdir)}".replace('/','__').replace('\\','__').replace(" & ","-").replace("'","").replace("(","").replace(")","").replace(" ","-");
 
-        newFileDir = f"image_links/{count % 100}/";
-        newFileLocation = f"{newFileDir}/{newFilename}".replace(" & ","-").replace("'","").replace("(","").replace(")","").replace(" ","-");
+        newFileDir = f"image_links2/{img_count % 100}";
+        newFileLocation = f"{newFileDir}/{newFilename}".replace(" & ","-").replace("'","").replace("(","").replace(")","").replace(" ","-").replace("%20","-");
         os.makedirs(newFileDir, exist_ok=True)
         wpFileName = os.path.splitext(newFilename)[0]
 
         if os.path.exists(fileLocation):
             if not os.path.islink(newFileLocation):
                 os.symlink(fileLocation, newFileLocation);
-                count = count + 1;
 
             if images == "":
                 images = wpFileName
             else:
                 images = images + f",{wpFileName}"
+
+            img_count = img_count + 1;
         else:
             print ("no such file");
 
     category = ""
 
-    if len(file.parts) > 2:
-        category = file.parts[1]
+    if len(file.parts) > 4:
+        category = file.parts[3]
 
-    shash = abs(hash(str(file))) % (10 ** 10)
+    shash = int(hashlib.md5(str(file).encode()).hexdigest(), 16) % (10 ** 10)
 
     #if "Visit to " in parser.title:
-    folderOut.write(f'{shash},{parser.title},{category},"{parser.description}","{images}","Old URL","{str(file)}",0,0\n')
+    if images != '':
+        folderOut.write(f'{shash},{parser.title},{category},0,"{parser.description}","{images}","Old URL","{str(file)}",0,0\n')
     #f.close()
 
 folderOut.close()
